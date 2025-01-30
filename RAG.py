@@ -1,3 +1,11 @@
+from langchain_community.document_loaders.pdf import PyMuPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from sentence_transformers import SentenceTransformer
+from transformers import AutoTokenizer
+from tkinter import filedialog
+
+'''
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain_community.embeddings.ollama import OllamaEmbeddings
@@ -6,7 +14,58 @@ from langchain.embeddings import CacheBackedEmbeddings
 from langchain.storage import LocalFileStore
 import ollama
 import time
+'''
+EMBEDDING_MODEL = "jxm/cde-small-v2"
+SEPARATORS = [
+    "\n#{1,6} ",
+    "```\n",
+    "\n\\*\\*\\*+\n",
+    "\n---+\n",
+    "\n___+\n",
+    "\n\n",
+    "\n",
+    " ",
+    ""
+]
 
+# prompt user to select a knowledge base
+file = filedialog.askopenfilename(
+    title= "Select a file to use as the knowledge base",
+    filetypes= ["*.png"]
+)
+
+# load knowledge base
+loader = PyMuPDFLoader(file_path= file)
+documents = loader.load()
+
+# split documents into chunks
+def split(chunk_size, chunk_overlap, documents):
+
+    splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+        chunk_size= chunk_size
+    )
+
+    chunks = splitter.split_documents(documents= documents)
+
+# get max sequence length
+length = SentenceTransformer('')
+
+
+
+model = "sentence-transformers/all-mpnet-base-v2"
+hf = HuggingFaceEmbeddings(model_name= model)
+
+connection = "postgresql+psycopg://langchain:langchain@localhost:6024/langchain"
+collection = "bulletin"
+
+vector_store = PGVector(
+    embeddings= hf,
+    collection_name= collection,
+    connection= connection,
+    use_jsonb= True,
+)
+
+'''
 # loads a PDF file as Documents and splits the docs into smaller chunks
 def load(file):
     loader = PyMuPDFLoader(file_path= file)
@@ -80,5 +139,5 @@ def rag(file, query):
     )
     return response["message"]["content"]
 
-
+'''
 
