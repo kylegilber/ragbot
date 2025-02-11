@@ -1,14 +1,10 @@
 
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
-#from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 #from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
-#from transformers import AutoTokenizer
+from transformers import AutoTokenizer
 from tkinter import filedialog
-import random
-
-import time
-start = time.time()
 
 '''
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -21,6 +17,7 @@ import ollama
 import time
 '''
 
+EMBEDDING_MODEL = "Alibaba-NLP/gte-Qwen2-1.5B-instruct"
 SEPARATORS = [
     "\n#{1,6} ",
     "```\n",
@@ -35,26 +32,36 @@ SEPARATORS = [
 
 
 def main():
+
     # prompt user to select a knowledge base
     file = filedialog.askopenfilename(
         title= "Select a file to use as the knowledge base",
-        filetypes= [("Text Files", "*.pdf;")]
-    )
+        filetypes= [("Text Files", "*.pdf;")])
 
     # load knowledge base
     loader = PyMuPDFLoader(file_path= file)
     documents = loader.load()
 
     # load embedding model
-    model = SentenceTransformer("jxm/cde-small-v2", trust_remote_code= True)
+    model = SentenceTransformer(EMBEDDING_MODEL, trust_remote_code= True)
+    
+    # reduce sequence length
+    model.max_seq_length = 8192
+
+    # chunk documents
+    chunks = split(512, documents)
 
 
-'''
-# split documents into chunks
 def split(size, documents):
+    """
+    Split documents into smaller chunks
+
+    :param size: integer specifying chunk size
+    :param documents: list of documents
+    """
 
     splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-        AutoTokenizer.from_pretrained(EMBEDDING_MODEL_NAME),p
+        AutoTokenizer.from_pretrained(EMBEDDING_MODEL),
         chunk_size= size,
         chunk_overlap= int(size / 10),
         add_start_index= True,
@@ -63,10 +70,9 @@ def split(size, documents):
     )
 
     chunks = splitter.split_documents(documents= documents)
+    return chunks
 
-# get max sequence length
-length = SentenceTransformer('')
-
+'''
 
 
 model = "sentence-transformers/all-mpnet-base-v2"
@@ -157,5 +163,4 @@ def rag(file, query):
     return response["message"]["content"]
 
 '''
-
-print(time.time() - start)
+main()
