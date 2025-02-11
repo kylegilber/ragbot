@@ -1,8 +1,9 @@
-
+from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-#from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
+from langchain_community.vectorstores import FAISS
 from transformers import AutoTokenizer
 from tkinter import filedialog
 
@@ -31,27 +32,6 @@ SEPARATORS = [
 ]
 
 
-def main():
-
-    # prompt user to select a knowledge base
-    file = filedialog.askopenfilename(
-        title= "Select a file to use as the knowledge base",
-        filetypes= [("Text Files", "*.pdf;")])
-
-    # load knowledge base
-    loader = PyMuPDFLoader(file_path= file)
-    documents = loader.load()
-
-    # load embedding model
-    model = SentenceTransformer(EMBEDDING_MODEL, trust_remote_code= True)
-    
-    # reduce sequence length
-    model.max_seq_length = 8192
-
-    # chunk documents
-    chunks = split(512, documents)
-
-
 def split(size, documents):
     """
     Split documents into smaller chunks
@@ -72,31 +52,51 @@ def split(size, documents):
     chunks = splitter.split_documents(documents= documents)
     return chunks
 
-'''
+
+def embed(chunks):
+    """
+    
+    """
+
+    embedder = HuggingFaceEmbeddings(
+        model_name= EMBEDDING_MODEL,
+        model_kwargs= {"device": "cpu"}
+        multi_process= True,
+        encode_kwargs= {"normalize_embeddings": True}
+    )
+
+    vectorstore = FAISS.from_documents(
+        documents= chunks,
+        embedding= embedder,
+        distance_strategy= DistanceStrategy.COSINE
+    )
+
+    return vectorstore
 
 
-model = "sentence-transformers/all-mpnet-base-v2"
-hf = HuggingFaceEmbeddings(model_name= model)
+def main():
 
-connection = "postgresql+psycopg://langchain:langchain@localhost:6024/langchain"
-collection = "bulletin"
+    # prompt user to select a knowledge base
+    file = filedialog.askopenfilename(
+        title= "Select a file to use as the knowledge base",
+        filetypes= [("Text Files", "*.pdf;")])
 
-vector_store = PGVector(
-    embeddings= hf,
-    collection_name= collection,
-    connection= connection,
-    use_jsonb= True,
-)
-'''
-'''
-# loads a PDF file as Documents and splits the docs into smaller chunks
-def load(file):
+    # load knowledge base
     loader = PyMuPDFLoader(file_path= file)
-    docs = loader.load()
+    documents = loader.load()
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size = 450, chunk_overlap = 0)
-    chunks = splitter.split_documents(documents= docs)
-    return chunks
+    # load embedding model
+    model = SentenceTransformer(EMBEDDING_MODEL, trust_remote_code= True)
+    
+    # reduce sequence length
+    model.max_seq_length = 8192
+
+    # chunk documents
+    chunks = split(512, documents)
+
+    # build vector store
+    store = embed(chunks)
+'''
     
 # embeds the data and stores the resulting vectors locally
 def embed(chunks):
@@ -163,4 +163,6 @@ def rag(file, query):
     return response["message"]["content"]
 
 '''
-main()
+if __name__ == '__main__':
+    freeze_support()
+    main()
