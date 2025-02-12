@@ -2,21 +2,10 @@ from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.embeddings import CacheBackedEmbeddings
-from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
 from langchain.storage import LocalFileStore
 from transformers import AutoTokenizer
 from tkinter import filedialog
-
-'''
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders.pdf import PyMuPDFLoader
-from langchain_community.embeddings.ollama import OllamaEmbeddings
-from langchain_community.vectorstores.faiss import FAISS
-
-import ollama
-import time
-'''
 
 EMBEDDING_MODEL = "Snowflake/snowflake-arctic-embed-l-v2.0"
 SEPARATORS = [
@@ -31,13 +20,13 @@ SEPARATORS = [
     ""
 ]
 
-
 def split(size, documents):
     """
     Split documents into smaller chunks
 
     :param size: integer specifying chunk size
     :param documents: list of documents
+    :returns: list of chunks
     """
 
     splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
@@ -53,28 +42,42 @@ def split(size, documents):
     return chunks
 
 
-def embed(chunks):
+def embed(chunks, model):
     """
-    
+    Embed chunks and locally store the resulting vectors
+
+    :param chunks: list of document data
+    :param model: embedding model
+    :returns: a vector store 
     """
 
     store = LocalFileStore("embeddings")
 
-    hf = HuggingFaceEmbeddings(
-        model_name= EMBEDDING_MODEL,
-        model_kwargs= {"device": "cpu"},
-        encode_kwargs= {"normalize_embeddings": False},
-        multi_process= True
+    embedder = CacheBackedEmbeddings.from_bytes_store(
+        underlying_embeddings= model,
+        document_embedding_cache= store,
+        namespace= model.model_name
     )
 
-    embedder = CacheBackedEmbeddings.from_bytes_store(
-        underlying_embeddings= hf,
-        document_embedding_cache= store,
-        namespace= hf.model_name
-    )
-    
     vectorstore = FAISS.from_documents(documents= chunks, embedding= embedder)
     vectorstore.save_local("indexes")
+    return vectorstore
+
+
+def load(model):
+    """
+    Load a locally-saved vector store
+
+    :param model: embedding model
+    :returns: a vector store
+    """
+
+    vectorstore = FAISS.load_local(
+        folder_path= "indexes",
+        embeddings= model,
+        allow_dangerous_deserialization= True
+    )
+
     return vectorstore
 
 
@@ -92,42 +95,22 @@ def main():
     # chunk documents
     chunks = split(512, documents)
 
-    # build vector store
-    store = embed(chunks)
+    # load embedding model
+    hf = HuggingFaceEmbeddings(
+        model_name= EMBEDDING_MODEL,
+        model_kwargs= {"device": "cpu"},
+        encode_kwargs= {"normalize_embeddings": False},
+        multi_process= True
+    )
+
+    # get vector store
+    try: store = load(hf)
+    except: store = embed(chunks, hf)
+
 
 '''
-    
-# embeds the data and stores the resulting vectors locally
-def embed(chunks):
-    # establish access to a embedding model through Ollama
-    embeddings = OllamaEmbeddings(model= "mxbai-embed-large")   # 7th ranked MTEB model
-
-    # specify a storage folder for embeddings
-    store = LocalFileStore("Embeddings")
-
-    # initialize a cache-backed embedder
-    embedder = CacheBackedEmbeddings.from_bytes_store(
-        underlying_embeddings= embeddings,  # the embedder to use for embedding
-        document_embedding_cache= store,    # ByteStore for caching embeddings
-        namespace= embeddings.model         # sets namespace to embedding model name
-    )
-    
-    # embed chunks and store resulting embedding vectors in a vector store
-    vectorstore = FAISS.from_documents(documents= chunks, embedding= embedder)
-    vectorstore.save_local("Indexes")    # saves vectorstore in local folder
-    return vectorstore
 
 def rag(file, query):
-    # load existing or create new vector store as retriever
-    try:
-        retriever = FAISS.load_local(
-            folder_path= "Indexes",
-            embeddings= OllamaEmbeddings(model= "mxbai-embed-large"),
-            allow_dangerous_deserialization= True)
-    except:
-        chunks = load(file) 
-        retriever = embed(chunks)
-
     # embed the user's query
     vector = OllamaEmbeddings(model= "mxbai-embed-large").embed_query(query)
 
