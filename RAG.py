@@ -1,9 +1,10 @@
-from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.embeddings import CacheBackedEmbeddings
 from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
+from langchain.storage import LocalFileStore
 from transformers import AutoTokenizer
 from tkinter import filedialog
 
@@ -12,13 +13,12 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain_community.embeddings.ollama import OllamaEmbeddings
 from langchain_community.vectorstores.faiss import FAISS
-from langchain.embeddings import CacheBackedEmbeddings
-from langchain.storage import LocalFileStore
+
 import ollama
 import time
 '''
 
-EMBEDDING_MODEL = "Alibaba-NLP/gte-Qwen2-1.5B-instruct"
+EMBEDDING_MODEL = "Snowflake/snowflake-arctic-embed-l-v2.0"
 SEPARATORS = [
     "\n#{1,6} ",
     "```\n",
@@ -58,19 +58,23 @@ def embed(chunks):
     
     """
 
-    embedder = HuggingFaceEmbeddings(
+    store = LocalFileStore("embeddings")
+
+    hf = HuggingFaceEmbeddings(
         model_name= EMBEDDING_MODEL,
-        model_kwargs= {"device": "cpu"}
-        multi_process= True,
-        encode_kwargs= {"normalize_embeddings": True}
+        model_kwargs= {"device": "cpu"},
+        encode_kwargs= {"normalize_embeddings": False},
+        multi_process= True
     )
 
-    vectorstore = FAISS.from_documents(
-        documents= chunks,
-        embedding= embedder,
-        distance_strategy= DistanceStrategy.COSINE
+    embedder = CacheBackedEmbeddings.from_bytes_store(
+        underlying_embeddings= hf,
+        document_embedding_cache= store,
+        namespace= hf.model_name
     )
-
+    
+    vectorstore = FAISS.from_documents(documents= chunks, embedding= embedder)
+    vectorstore.save_local("indexes")
     return vectorstore
 
 
@@ -85,17 +89,12 @@ def main():
     loader = PyMuPDFLoader(file_path= file)
     documents = loader.load()
 
-    # load embedding model
-    model = SentenceTransformer(EMBEDDING_MODEL, trust_remote_code= True)
-    
-    # reduce sequence length
-    model.max_seq_length = 8192
-
     # chunk documents
     chunks = split(512, documents)
 
     # build vector store
     store = embed(chunks)
+
 '''
     
 # embeds the data and stores the resulting vectors locally
@@ -164,5 +163,4 @@ def rag(file, query):
 
 '''
 if __name__ == '__main__':
-    freeze_support()
     main()
